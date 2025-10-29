@@ -1,48 +1,41 @@
+# slave_sensor1.py
 import network
 import socket
 import time
 import dht
 from machine import Pin
+import gc
 
-SSID = "RedESP32"
-PASSWORD = "miclave123"
-SENSOR_ID = "sensor1"
-DHT_PIN = 15  # Puedes cambiarlo si usas otro pin
+gc.collect()
 
-# ⚠️ ASEGÚRATE DE USAR EL SENSOR CORRECTO:
-d = dht.DHT11(Pin(DHT_PIN))  # ← CAMBIA A DHT22 SI ES NECESARIO
-
+# Wi-Fi
 wlan = network.WLAN(network.STA_IF)
+wlan.active(False)
+time.sleep(0.1)
 wlan.active(True)
-wlan.connect(SSID, PASSWORD)
+wlan.connect("RedESP32", "miclave123")
 
-print("Conectando a:", SSID)
+print("Conectando como sensor1...")
 while not wlan.isconnected():
-    time.sleep(0.5)
-    print(".", end="")
-print("\n✅ Conectado. IP:", wlan.ifconfig()[0])
+    time.sleep(0.3)
+print("✅ sensor1 conectado. IP:", wlan.ifconfig()[0])
 
-SERVER_IP = "192.168.4.1"
-SERVER_PORT = 8888
+# Sensor DHT11 en GPIO15
+d = dht.DHT11(Pin(15))
 
 while True:
     try:
         d.measure()
         temp = d.temperature()
         hum = d.humidity()
-        
-        # ✅ MOSTRAR CLARAMENTE EN CONSOLA
-        print(f"\n🌡️  {SENSOR_ID} → Temp: {temp}°C | Hum: {hum}%")
-        
-        # Enviar al AP
-        payload = f"{SENSOR_ID}:{temp},{hum}"
+        payload = f"sensor1:{temp},{hum}"
+
+        # Enviar
         s = socket.socket()
-        s.connect((SERVER_IP, SERVER_PORT))
+        s.connect(("192.168.4.1", 8888))
         s.send(payload.encode())
         s.close()
-        print("📤 Enviado al AP")
-        
+        print(f"📤 sensor1 enviado: {temp}°C, {hum}%")
     except Exception as e:
-        print("❌ Error:", e)
-    
-    time.sleep(5)
+        print("❌ sensor1 error:", e)
+    time.sleep(3)
