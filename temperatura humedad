@@ -1,0 +1,48 @@
+import network
+import socket
+import time
+import dht
+from machine import Pin
+
+SSID = "RedESP32"
+PASSWORD = "miclave123"
+SENSOR_ID = "sensor1"
+DHT_PIN = 15  # Puedes cambiarlo si usas otro pin
+
+# ⚠️ ASEGÚRATE DE USAR EL SENSOR CORRECTO:
+d = dht.DHT11(Pin(DHT_PIN))  # ← CAMBIA A DHT22 SI ES NECESARIO
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect(SSID, PASSWORD)
+
+print("Conectando a:", SSID)
+while not wlan.isconnected():
+    time.sleep(0.5)
+    print(".", end="")
+print("\n✅ Conectado. IP:", wlan.ifconfig()[0])
+
+SERVER_IP = "192.168.4.1"
+SERVER_PORT = 8888
+
+while True:
+    try:
+        d.measure()
+        temp = d.temperature()
+        hum = d.humidity()
+        
+        # ✅ MOSTRAR CLARAMENTE EN CONSOLA
+        print(f"\n🌡️  {SENSOR_ID} → Temp: {temp}°C | Hum: {hum}%")
+        
+        # Enviar al AP
+        payload = f"{SENSOR_ID}:{temp},{hum}"
+        s = socket.socket()
+        s.connect((SERVER_IP, SERVER_PORT))
+        s.send(payload.encode())
+        s.close()
+        print("📤 Enviado al AP")
+        
+    except Exception as e:
+        print("❌ Error:", e)
+    
+    time.sleep(5)
