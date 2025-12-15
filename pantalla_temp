@@ -1,0 +1,156 @@
+// 1. LIBRERÍAS REQUERIDAS
+// -----------------------
+// SPI e TFT_eSPI ya están incluidas en tu código
+#include <SPI.h>
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+#include "DHT.h" // Librería para el sensor DHT11/DHT22
+
+// 2. DEFINICIÓN DE PINES
+// IMPORTANTE: Conecta el pin "T_CS" de la pantalla al GPIO 13 del ESP32
+#define T_CS_PIN    13 // Chip Select para el Touch (XPT2046)
+
+// --- Pines DHT ---
+#define DHTPIN 14      // Pin digital del ESP32 donde se conecta el DHT
+#define DHTTYPE DHT11  // Puedes cambiar a DHT22 si es tu modelo
+
+// 3. INSTANCIAR OBJETOS
+TFT_eSPI tft = TFT_eSPI(); 
+XPT2046_Touchscreen touchscreen(T_CS_PIN);
+DHT dht(DHTPIN, DHTTYPE); // Inicializa el sensor DHT
+
+// Variables para coordenadas de toque (del código original)
+TS_Point p;
+int x, y;
+
+// ================================================================
+// FUNCIÓN PARA DIBUJAR EL MENSAJE
+// ================================================================
+void mostrarMensajePrincipal() {
+  // Configurar alineación
+  tft.setTextDatum(MC_DATUM); 
+
+  // -- Título Principal --
+  tft.setTextColor(TFT_WHITE, TFT_BLACK); 
+  tft.setTextSize(2); 
+  tft.drawString("TEMPERATURA Y HUMEDAD", tft.width() / 2, 20);
+  
+  // -- Decoración (Línea separadora) --
+  tft.drawFastHLine(10, 50, tft.width() - 20, TFT_GREEN);
+  
+  // -- Leyendas Estáticas --
+  tft.setTextSize(3);
+  tft.setTextDatum(TL_DATUM); // Alineación Top-Left para las etiquetas
+  
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.drawString("Temperatura:", 10, 80);
+  
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.drawString("Humedad:", 10, 160);
+  
+  // Borrar el área de las coordenadas de toque
+  tft.fillRect(0, 200, tft.width(), 40, TFT_BLACK);
+}
+
+// ================================================================
+// SETUP
+// ================================================================
+void setup() {
+  Serial.begin(115200);
+  
+  // --- INICIAR TOUCH ---
+  touchscreen.begin();
+  touchscreen.setRotation(1); // Mismo que la pantalla para coordenadas
+
+  // --- INICIAR PANTALLA ---
+  tft.init();
+  tft.setRotation(1); // Rotación Horizontal (320x240)
+  
+  // Limpiar pantalla en negro
+  tft.fillScreen(TFT_BLACK);
+  
+  // Inicializar sensor DHT
+  dht.begin();
+
+  // --- DIBUJAR EL TEXTO INICIAL ---
+  mostrarMensajePrincipal();
+}
+
+// ================================================================
+// LOOP
+// ================================================================
+void loop() {
+  
+  // 1. LECTURA DEL SENSOR DHT
+  // -------------------------------------
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  // Comprueba si alguna lectura falló
+  if (isnan(h) || isnan(t)) {
+    Serial.println(F("¡Error al leer del sensor DHT!"));
+    
+    // Muestra error en pantalla
+    tft.setTextDatum(MC_DATUM); 
+    tft.setTextSize(4);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.drawString("ERROR DHT", tft.width() / 2, tft.height() / 2);
+    
+  } else {
+    
+    // Borra el área de los valores anteriores
+    tft.fillRect(200, 70, 100, 100, TFT_BLACK); 
+    
+    // Muestra la TEMPERATURA
+    tft.setTextDatum(TR_DATUM); // Alineación Top-Right
+    tft.setTextSize(5);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.drawFloat(t, 1, 300, 110); // Valor flotante
+    
+    // Muestra la HUMEDAD
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.drawFloat(h, 1, 300, 190); // Valor flotante
+    
+    // Unidades
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("C", 305, 110); // Unidades de Temperatura
+    tft.drawString("%", 305, 190); // Unidades de Humedad
+    
+    // Debug por Serial
+    Serial.print("T: "); Serial.print(t); Serial.print(" C | H: "); Serial.print(h); Serial.println(" %");
+  }
+  
+  // 2. DETECCIÓN DE TOQUE (Tu código original)
+  // -------------------------------------
+  if (touchscreen.touched()) {
+    p = touchscreen.getPoint();
+
+    // Mapeo (Asegúrate de que la calibración sea correcta para tu pantalla)
+    // El mapa necesita ser ajustado según los valores reales de p.x y p.y de tu pantalla.
+    x = map(p.x, 200, 3700, 0, 320); 
+    y = map(p.y, 200, 3700, 0, 240);
+    
+    // Dibujar punto rojo
+    tft.fillCircle(x, y, 5, TFT_RED); // Aumento el tamaño del círculo a 5
+    
+    // Mostrar coordenadas del toque en la parte inferior
+    tft.fillRect(0, 200, tft.width(), 40, TFT_BLACK); // Limpiar área de coordenadas
+    tft.setTextDatum(MC_DATUM); 
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+    String touchInfo = "Touch: X=" + String(x) + " Y=" + String(y);
+    tft.drawString(touchInfo, tft.width() / 2, 220);
+
+    // Debug
+    Serial.print("Touch Raw -> X: "); Serial.print(p.x);
+    Serial.print(" Y: "); Serial.print(p.y);
+    Serial.print(" | Screen -> X: "); Serial.print(x);
+    Serial.print(" Y: "); Serial.println(y);
+  } else {
+      // Si no hay toque, podemos esperar un momento más corto
+      delay(50);
+  }
+  
+  // Retraso para no leer el sensor DHT y actualizar la pantalla demasiado rápido
+  delay(50); 
